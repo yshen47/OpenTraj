@@ -11,12 +11,12 @@ import os
 from datetime import datetime
 
 @click.command()
-@click.option('--experiment_name', type=str, default="none")
+@click.option('--experiment_name', type=str, default="naive_lstm")
 @click.option('--steps', type=int, default=0)
 @click.option('--num_workers', type=int, default=4)
 @click.option('--last_checkpoint', type=str, default=None)
 @click.option('--batch_size', type=int, default=4)
-@click.option('--epoch_num', type=int, default=5)
+@click.option('--epoch_num', type=int, default=1)
 @click.option('--lr', type=float, default=1e-3)
 @click.option('--context_frame_num', type=int, default=8)
 @click.option('--trajectory_interval', type=int, default=20) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
@@ -62,7 +62,7 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
             loss.backward()
             optimizer.step()
             print('train_ADE: {}'.format(loss.item()))
-            tb_logger.log_value("train_ADE", loss.item())
+            tb_logger.log_value("train_ADE", loss.item(), step=steps)
             steps += 1
             if steps % log_step == 1:
                 model.eval()
@@ -74,7 +74,7 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
                     loss = criterion(preds, inputs[:, :, context_frame_num:])
                     val_loss += loss.item()
                 val_loss /= len(val_data_loader)
-                tb_logger.log_value("val_ADE", val_loss)
+                tb_logger.log_value("val_ADE", val_loss, step=steps)
                 print("val_ADE: {}".format(val_loss))
                 if val_loss < best_val_loss:
                     best_val_loss = val_loss
