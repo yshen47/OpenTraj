@@ -10,6 +10,8 @@ import sys
 import cv2
 from toolkit.core.trajdataset import TrajDataset
 from copy import deepcopy
+import os, sys
+import matplotlib.pyplot as plt
 
 #tested with date: 01Aug, 01Jul, 01Sep
 
@@ -52,7 +54,7 @@ def load_edinburgh(path, **kwargs):
     new_id = 0
     scale = 0.0247
     # load data from all files
-    for file in files_list:
+    for file in files_list[:1]:
         data = pd.read_csv(file, sep="\n|=", header=None,index_col=None)
         data.reset_index(inplace =True)
         properties = data[data['index'].str.startswith('Properties')]
@@ -134,4 +136,9 @@ def load_edinburgh(path, **kwargs):
     return traj_dataset
 
 
-
+if __name__ == "__main__":
+    import os, sys
+    import matplotlib.pyplot as plt
+    opentraj_root = '../../datasets/Edinburgh/annotations'
+    traj_dataset = load_edinburgh(opentraj_root)
+    pass

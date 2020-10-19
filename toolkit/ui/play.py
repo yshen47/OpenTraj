@@ -3,12 +3,14 @@ import cv2
 import os
 import argparse
 import time
-
+# os.chdir('../../')
+# import pathlib
+# print(pathlib.Path(__file__).parent.absolute())
 # from parser.parser_eth import ParserETH
 # from parser.parser_sdd import ParserSDD
 # from parser.parser_gc  import ParserGC
 # from parser.parser_hermes import ParserHermes
-
+from toolkit.loaders.loader_edinburgh import load_edinburgh
 from toolkit.loaders.loader_eth import load_eth
 from toolkit.loaders.loader_crowds import load_crowds
 from toolkit.loaders.loader_sdd import load_sdd, load_sdd_dir
@@ -80,7 +82,7 @@ class Play:
             cv2.circle(self.bg_im, (pos[1], pos[0]), radius, color, width)
 
     def play(self, traj_dataset, Hinv, media_file):
-        timestamps = sorted(traj_dataset.__t_p_dict__.keys())
+        timestamps = sorted(traj_dataset.data['timestamp'])
 
         if os.path.exists(media_file):
             if self.is_a_video(media_file):
@@ -177,7 +179,7 @@ class Play:
 
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser(description='OpenTraj - Human Trajectory Dataset Package')
-    argparser.add_argument('--data-root', '--data-root',
+    argparser.add_argument('--data-root', '--data-root', default='datasets',
                            help='the root address of OpenTraj directory')
     argparser.add_argument('--gui-mode', '--g',
                            default='pyqt', choices=['pyqt', 'opencv'], #  'tkinter' ?
@@ -223,6 +225,10 @@ if __name__ == '__main__':
         homog_file = os.path.join(opentraj_root, 'ETH/seq_hotel/H.txt')
         # media_file = os.path.join(opentraj_root, 'ETH/seq_hotel/reference.png')
         media_file = os.path.join(opentraj_root, 'ETH/seq_hotel/video.avi')
+
+    elif args.dataset == 'Edinburgh':
+        opentraj_root = '../../datasets/Edinburgh/annotations'
+        traj_dataset = load_edinburgh(opentraj_root)
 
     # #============================ UCY =================================
     # elif args.dataset == 'zara01':
