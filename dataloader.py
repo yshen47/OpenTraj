@@ -3,6 +3,7 @@ import os
 import numpy as np
 from toolkit.loaders.loader_eth import load_eth
 import random
+import pandas as pd
 
 
 class ETHDataset(torch.utils.data.Dataset):
@@ -10,7 +11,7 @@ class ETHDataset(torch.utils.data.Dataset):
     def __init__(self, mode, trajectory_interval, context_length, agent_buffer_size):
         """
         mode:                       str         ['train', 'val', 'test']
-        trajectory_interval:          int         time window for a batch data, each frame is 0.4 sec
+        trajectory_interval:        int         time window for a batch data, each frame is 0.4 sec
         context_length:             int         known past trajectories
         agent_buffer_size:          int         max number of agents allowed in one data item
         """
@@ -44,6 +45,16 @@ class ETHDataset(torch.utils.data.Dataset):
     def __len__(self):
         return len(self.traj_dataset.data) - self.trajectory_interval
 
+    @staticmethod
+    def count_trailing_zero(l):
+        c = 0
+        for a in reversed(l):
+            if a[0] == 0 and a[0] == 0:
+                c += 1
+            else:
+                break
+        return c
+
     def __getitem__(self, item):
         start_index = item
         start_timestamp = self.traj_dataset.data.timestamp[start_index]
@@ -55,7 +66,7 @@ class ETHDataset(torch.utils.data.Dataset):
         agents = agents[:self.agent_buffer_size]
 
         # group trajectory by agents
-        agent_trajs = torch.zeros([self.agent_buffer_size, self.trajectory_interval, 2]) # (agent_dim, temporal_dim, pos)
+        agent_trajs = np.zeros([self.agent_buffer_size, self.trajectory_interval, 2]) # (agent_dim, temporal_dim, pos)
 
         for i in range(subset.shape[0]):
             curr_time_id = int((subset['timestamp'].iloc[i] - start_timestamp) / 0.4)
@@ -65,4 +76,22 @@ class ETHDataset(torch.utils.data.Dataset):
                 curr_pos_y = subset['pos_y'].iloc[i]
                 agent_trajs[curr_agent_id][curr_time_id][0] = curr_pos_x
                 agent_trajs[curr_agent_id][curr_time_id][1] = curr_pos_y
+
+        # linear interpolation to fill missing data in each trajectory
+        for i, agent_traj in enumerate(agent_trajs):
+            df = pd.DataFrame(data=agent_traj, columns=['pos_x', 'pos_y'])
+            trailing_zero = ETHDataset.count_trailing_zero(agent_traj)
+            df = df.replace(0, np.nan)
+            pos_x = df['pos_x'].interpolate().to_numpy()
+            pos_y = df['pos_y'].interpolate().to_numpy()
+            if trailing_zero > 0:
+                pos_x[-trailing_zero:] = 0
+                pos_y[-trailing_zero:] = 0
+            agent_trajs[i, :, 0] = pos_x
+            agent_trajs[i, :, 1] = pos_y
+        agent_trajs = np.nan_to_num(agent_trajs)
+        if np.isnan(agent_trajs).any():
+            print('here')
+            pass
+        agent_trajs = torch.tensor(agent_trajs, dtype=torch.float)
         return agent_trajs
