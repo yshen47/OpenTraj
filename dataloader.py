@@ -16,7 +16,7 @@ class ETHDataset(torch.utils.data.Dataset):
         """
         self.mode = mode
         assert trajectory_length > context_length
-        self.trajectory_length = trajectory_length
+        self.trajectory_interval = trajectory_length
         self.agent_buffer_size = agent_buffer_size
         self.context_length = context_length
         annot_file = os.path.join('datasets', 'ETH/seq_eth/obsmat.txt')
@@ -42,23 +42,22 @@ class ETHDataset(torch.utils.data.Dataset):
         return dataset
 
     def __len__(self):
-        return len(self.traj_dataset.data) - self.trajectory_length
+        return len(self.traj_dataset.data) - self.trajectory_interval
 
     def __getitem__(self, item):
         start_index = item
-        subset = self.traj_dataset.data.iloc[start_index:start_index+self.trajectory_length]
-
-        start_timestamp = subset['timestamp'].iloc[0]
+        start_timestamp = self.traj_dataset.data.iloc[start_index]
+        subset = self.traj_dataset.data.iloc[start_index:start_index + self.trajectory_interval]
         agents = list(set(subset['agent_id'].iloc[:self.context_length])) # to ensure that agents appear in context frames, otherwise it's unreasonable to predict its future occurence.
         random.shuffle(agents)
         agents = agents[:self.agent_buffer_size]
 
         # group trajectory by agents
-        agent_trajs = torch.zeros([self.agent_buffer_size, self.trajectory_length,2]) # (agent_dim, temporal_dim, pos)
+        agent_trajs = torch.zeros([self.agent_buffer_size, self.trajectory_interval, 2]) # (agent_dim, temporal_dim, pos)
 
-        for i in range(self.trajectory_length):
+        for i in range(self.trajectory_interval):
             curr_time_id = int((subset['timestamp'].iloc[i] - start_timestamp) / 0.4)
-            if subset['agent_id'].iloc[i] in agents and curr_time_id < self.trajectory_length:
+            if subset['agent_id'].iloc[i] in agents and curr_time_id < self.trajectory_interval:
                 curr_agent_id = agents.index(subset['agent_id'].iloc[i])
                 curr_pos_x = subset['pos_x'].iloc[i]
                 curr_pos_y = subset['pos_y'].iloc[i]
