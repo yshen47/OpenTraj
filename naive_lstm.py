@@ -16,12 +16,13 @@ from datetime import datetime
 @click.option('--num_workers', type=int, default=1)
 @click.option('--last_checkpoint', type=str, default=None)
 @click.option('--batch_size', type=int, default=4)
-@click.option('--epoch_num', type=int, default=100)
+@click.option('--epoch_num', type=int, default=5)
 @click.option('--lr', type=float, default=1e-3)
 @click.option('--context_frame_num', type=int, default=8)
 @click.option('--trajectory_interval', type=int, default=20) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
 @click.option('--agent_buffer_size', type=int, default=8)
-def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch_num, lr, context_frame_num, trajectory_interval, agent_buffer_size):
+@click.option('--log_step', type=int, default=128)
+def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch_num, lr, context_frame_num, trajectory_interval, agent_buffer_size, log_step):
     model_id = datetime.now().strftime("%m-%d-%H:%M:%S")
     model_dir = os.path.join("trained_models", experiment_name, model_id)
     if not os.path.exists(model_dir):
@@ -48,8 +49,9 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
         steps = saved_model["steps"]
     optimizer = torch.optim.Adam(params=model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-08)
     criterion = torch.nn.MSELoss().to(device)
+    model.train()
     for e in range(epoch_num):
-        model.train()
+
         print("Epoch: ", str(e))
         for i, inputs in tqdm(
                 enumerate(train_data_loader), total=len(train_data_loader)):
@@ -62,31 +64,33 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
             print('train_loss: {}'.format(loss.item()))
             tb_logger.log_value("train_loss", loss.item())
             steps += 1
+            if steps % log_step == 1:
+                model.eval()
+                val_loss = 0.0
+                for i, inputs in tqdm(
+                        enumerate(val_data_loader), total=len(val_data_loader)):
+                    inputs = inputs.to(device)
+                    preds = model(inputs, context_frame_num)
+                    loss = criterion(preds, inputs[:, :, context_frame_num:])
+                    val_loss += loss.item()
+                val_loss /= len(val_data_loader)
+                tb_logger.log_value("val_loss", val_loss)
+                print("val_loss: {}".format(val_loss))
+                if val_loss < best_val_loss:
+                    best_val_loss = val_loss
+                    save_checkpoint({
+                        'model': model.state_dict(),
+                        'valid_loss': best_val_loss,
+                        'steps': steps,
+                    }, prefix=model_dir)
+                else:
+                    save_checkpoint({
+                        'model': model.state_dict(),
+                        'valid_loss': best_val_loss,
+                        'steps': steps,
+                    }, prefix=model_dir + '/checkpoint_{}.pth.tar'.format(steps))
 
-        model.eval()
-        val_loss = 0.0
-        for i, inputs in tqdm(
-                enumerate(val_data_loader), total=len(val_data_loader)):
-            inputs = inputs.to(device)
-            preds = model(inputs, context_frame_num)
-            loss = criterion(preds, inputs[:, :, context_frame_num:])
-            tb_logger.log_value("val_loss", loss.item())
-            val_loss += loss.item()
-        val_loss /= len(val_data_loader)
-
-        if val_loss < best_val_loss:
-            best_val_loss = val_loss
-            save_checkpoint({
-                'model': model.state_dict(),
-                'valid_loss': best_val_loss,
-                'steps': steps,
-            }, prefix=model_dir)
-        else:
-            save_checkpoint({
-                'model': model.state_dict(),
-                'valid_loss': best_val_loss,
-                'steps': steps,
-            }, prefix=model_dir + '/checkpoint_{}.pth.tar'.format(steps))
+                model.train()
 
 
 if __name__ == '__main__':

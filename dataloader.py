@@ -36,6 +36,10 @@ class ETHDataset(torch.utils.data.Dataset):
             start_time = traj_dataset.data['timestamp'][0] + total_time * 0.8
             end_time = traj_dataset.data['timestamp'][0] + total_time
         self.traj_dataset = self.extract_dataset(traj_dataset, start_time, end_time)
+        self.traj_dataset.data.reset_index(inplace=True)
+
+        if mode != 'train':
+            self.start_indices = np.arange(0, len(self.traj_dataset.data) - self.trajectory_interval, self.trajectory_interval)
 
     def extract_dataset(self, dataset, start_time, end_time):
         valid_indices = np.where((dataset.data['timestamp'] >= start_time) & (dataset.data['timestamp'] < end_time))
@@ -43,7 +47,10 @@ class ETHDataset(torch.utils.data.Dataset):
         return dataset
 
     def __len__(self):
-        return len(self.traj_dataset.data) - self.trajectory_interval
+        if self.mode == "train":
+            return len(self.traj_dataset.data) - self.trajectory_interval
+        else:
+            return len(self.start_indices)
 
     @staticmethod
     def count_trailing_zero(l):
@@ -56,7 +63,10 @@ class ETHDataset(torch.utils.data.Dataset):
         return c
 
     def __getitem__(self, item):
-        start_index = item
+        if self.mode == 'train':
+            start_index = item
+        else:
+            start_index = self.start_indices[item]
         start_timestamp = self.traj_dataset.data.timestamp[start_index]
         end_timestamp = start_timestamp + self.trajectory_interval * 0.4
         indices = np.where((self.traj_dataset.data.timestamp >= start_timestamp) & (self.traj_dataset.data.timestamp < end_timestamp))[0]
