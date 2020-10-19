@@ -7,16 +7,16 @@ import random
 
 class ETHDataset(torch.utils.data.Dataset):
 
-    def __init__(self, mode, trajectory_length, context_length, agent_buffer_size):
+    def __init__(self, mode, trajectory_interval, context_length, agent_buffer_size):
         """
         mode:                       str         ['train', 'val', 'test']
-        trajectory_length:          int         time window for a batch data, each frame is 0.4 sec
+        trajectory_interval:          int         time window for a batch data, each frame is 0.4 sec
         context_length:             int         known past trajectories
         agent_buffer_size:          int         max number of agents allowed in one data item
         """
         self.mode = mode
-        assert trajectory_length > context_length
-        self.trajectory_interval = trajectory_length
+        assert trajectory_interval > context_length
+        self.trajectory_interval = trajectory_interval
         self.agent_buffer_size = agent_buffer_size
         self.context_length = context_length
         annot_file = os.path.join('datasets', 'ETH/seq_eth/obsmat.txt')
@@ -46,8 +46,10 @@ class ETHDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, item):
         start_index = item
-        start_timestamp = self.traj_dataset.data.iloc[start_index]
-        subset = self.traj_dataset.data.iloc[start_index:start_index + self.trajectory_interval]
+        start_timestamp = self.traj_dataset.data.timestamp[start_index]
+        end_timestamp = start_timestamp + self.trajectory_interval * 0.4
+        indices = np.where((self.traj_dataset.data.timestamp >= start_timestamp) & (self.traj_dataset.data.timestamp < end_timestamp))[0]
+        subset = self.traj_dataset.data.iloc[indices]
         agents = list(set(subset['agent_id'].iloc[:self.context_length])) # to ensure that agents appear in context frames, otherwise it's unreasonable to predict its future occurence.
         random.shuffle(agents)
         agents = agents[:self.agent_buffer_size]
@@ -55,7 +57,7 @@ class ETHDataset(torch.utils.data.Dataset):
         # group trajectory by agents
         agent_trajs = torch.zeros([self.agent_buffer_size, self.trajectory_interval, 2]) # (agent_dim, temporal_dim, pos)
 
-        for i in range(self.trajectory_interval):
+        for i in range(subset.shape[0]):
             curr_time_id = int((subset['timestamp'].iloc[i] - start_timestamp) / 0.4)
             if subset['agent_id'].iloc[i] in agents and curr_time_id < self.trajectory_interval:
                 curr_agent_id = agents.index(subset['agent_id'].iloc[i])

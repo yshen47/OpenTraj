@@ -17,7 +17,7 @@ from datetime import datetime
 @click.option('--last_checkpoint', type=str, default=None)
 @click.option('--batch_size', type=int, default=4)
 @click.option('--epoch_num', type=int, default=100)
-@click.option('--lr', type=float, default=1e-4)
+@click.option('--lr', type=float, default=1e-3)
 @click.option('--context_frame_num', type=int, default=8)
 @click.option('--trajectory_interval', type=int, default=20) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
 @click.option('--agent_buffer_size', type=int, default=8)
