@@ -1,13 +1,15 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 import random
 
+
 class Model(nn.Module):
-    def __init__(self, hidden_size=128):
+    def __init__(self, context_frame_num, device, hidden_size=64):
         super(Model, self).__init__()
-        self.embed = nn.Linear(4, hidden_size)
+        self.embed = nn.Linear(2, hidden_size)
+        self.device = device
         self.epsilon = 0.5
+        self.context_frame_num = context_frame_num
         self.GRUCell = torch.nn.GRUCell(hidden_size, hidden_size)
         self.fc = nn.Sequential(*[
             nn.Linear(hidden_size, hidden_size // 2),
@@ -17,26 +19,32 @@ class Model(nn.Module):
             nn.Linear(hidden_size // 2, 2),
         ])
 
-    def forward(self, pos_x, pos_y, v_x, v_y, context_frame_num):
-        res = []
-        x = torch.stack([pos_x, pos_y, v_x, v_y]).permute(0, 2, 1)
-        batch_size, trajectory_length = x.shape[:2]
-        x = x.reshape(-1, *x.shape[2:])
+    def forward(self, inputs, context_frame_num):
+
+        batch_size, agent_size, trajectory_length = inputs.shape[:3]
+        x = inputs.reshape(-1, *inputs.shape[3:])
         x = self.embed(x)
-        x = x.view(batch_size, trajectory_length, *x.shape[1:])
-        hidden = None
-        for i in range(v_x.shape[1]):
-            if hidden is None:
-                hidden = self.GRUCell(x[:, i])
-            else:
-                if i < context_frame_num:
-                    hidden = self.GRUCell(x[:, i], hidden)
+        x = x.view(batch_size, agent_size, trajectory_length, *x.shape[1:])
+        hiddens = []
+        res = torch.zeros(*inputs.shape[:2], trajectory_length - self.context_frame_num, 2).to(self.device)
+        for time_i in range(trajectory_length):
+            for agent_i in range(agent_size):
+                if len(hiddens) < agent_size:
+                    hidden = self.GRUCell(x[:, agent_i, time_i])
+                    hiddens.append(hidden)
                 else:
-                    if self.epsilon > random.random():
-                        hidden = self.GRUCell(hidden, hidden)
+                    if time_i < context_frame_num:
+                        hidden = self.GRUCell(x[:, agent_i, time_i], hiddens[agent_i])
+                        hiddens[agent_i] = hidden
                     else:
-                        hidden = self.GRUCell(x[:, i], hidden)
-            curr = self.fc(hidden)
-            res.append(curr)
-        res = torch.stack(res).permute(1,0,2)
-        return res[:, :, 0], res[:, :, 1]
+                        if self.epsilon > random.random():
+                            hidden = self.GRUCell(hiddens[agent_i], hiddens[agent_i])
+                        else:
+                            hidden = self.GRUCell(x[:, agent_i, time_i], hiddens[agent_i])
+                        curr = self.fc(hidden)
+                        res[:, agent_i, time_i - context_frame_num] = curr
+
+        # exclude those preds at moments when inputs doesn't have gt location (out of sight)
+        gt_mask = inputs[:, :, context_frame_num:] != 0
+        res *= gt_mask
+        return res

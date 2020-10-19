@@ -1,8 +1,5 @@
 from dataloader import ETHDataset
-import torch
 import click
-import numpy as np
-import os
 import tensorboard_logger as tb_logger
 from torch.utils import data
 from tqdm import tqdm
@@ -22,8 +19,9 @@ from datetime import datetime
 @click.option('--epoch_num', type=int, default=100)
 @click.option('--lr', type=float, default=1e-4)
 @click.option('--context_frame_num', type=int, default=8)
-@click.option('--trajectory_length', type=int, default=16)
-def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch_num, lr, context_frame_num, trajectory_length):
+@click.option('--trajectory_length', type=int, default=20) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
+@click.option('--agent_buffer_size', type=int, default=8)
+def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch_num, lr, context_frame_num, trajectory_length, agent_buffer_size):
     model_id = datetime.now().strftime("%m-%d-%H:%M:%S")
     model_dir = os.path.join("trained_models", experiment_name, model_id)
     if not os.path.exists(model_dir):
@@ -34,15 +32,15 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     best_val_loss = np.Inf
     device = torch.device('cuda:0')
 
-    train_dataset = ETHDataset("train", trajectory_length)
-    train_data_loader = data.DataLoader(train_dataset, drop_last=True, shuffle=False,
+    train_dataset = ETHDataset("train", trajectory_length, context_frame_num, agent_buffer_size)
+    train_data_loader = data.DataLoader(train_dataset, drop_last=True, shuffle=True,
                                         num_workers=num_workers, pin_memory=True, batch_size=batch_size)
 
-    val_dataset = ETHDataset("val", trajectory_length)
+    val_dataset = ETHDataset("val", trajectory_length, context_frame_num, agent_buffer_size)
     val_data_loader = data.DataLoader(val_dataset, batch_size=batch_size, drop_last=False,
                                       num_workers=num_workers, pin_memory=True, shuffle=False)
 
-    model = Model().to(device)
+    model = Model(context_frame_num, device).to(device)
     if last_checkpoint is not None:
         saved_model = torch.load(os.path.join(last_checkpoint, 'model_best.pth.tar'))
         model.load_state_dict(saved_model['model'])
@@ -53,21 +51,16 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     for e in range(epoch_num):
         model.train()
         print("Epoch: ", str(e))
-        for i, (pos_x, pos_y, v_x, v_y) in tqdm(
+        for i, inputs in tqdm(
                 enumerate(train_data_loader), total=len(train_data_loader)):
-            pos_x = pos_x.to(device)
-            pos_y = pos_y.to(device)
-            v_x = v_x.to(device)
-            v_y = v_y.to(device)
-            pred_x, pred_y = model(pos_x, pos_y, v_x, v_y, context_frame_num)
-            #print(pred_x, pred_y)
-            print(pos_x, pos_y)
-            loss_x = criterion(pred_x[:, context_frame_num:], v_x[:, context_frame_num:])
-            loss_y = criterion(pred_y[:, context_frame_num:], v_y[:, context_frame_num:])
-            loss = loss_x + loss_y
+            inputs = inputs.to(device)
+            preds = model(inputs, context_frame_num)
+            loss = criterion(preds, inputs[:, :, context_frame_num:])
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
             print('train_loss: {}'.format(loss.item()))
+
+
 if __name__ == '__main__':
     main()
