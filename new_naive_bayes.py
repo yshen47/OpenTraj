@@ -36,6 +36,7 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     train_dataset = ETHDataset("train", trajectory_interval, context_frame_num, agent_buffer_size)
     train_data_loader = data.DataLoader(train_dataset, drop_last=True, shuffle=True,
                                         num_workers=num_workers, pin_memory=True, batch_size=batch_size)
+    print(train_dataset)
 
     val_dataset = ETHDataset("val", trajectory_interval, context_frame_num, agent_buffer_size)
     val_data_loader = data.DataLoader(val_dataset, batch_size=batch_size, drop_last=False,
@@ -50,7 +51,7 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     optimizer = torch.optim.Adam(params=model.parameters(), lr=lr, betas=(0.9, 0.999), eps=1e-08)
     criterion = torch.nn.MSELoss().to(device)
     model.train()
-    for e in range(epoch_num):
+    '''for e in range(epoch_num):
 
         print("Epoch: ", str(e))
         for i, inputs in tqdm(
@@ -91,6 +92,7 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
                     }, prefix=model_dir + '/checkpoint_{}.pth.tar'.format(steps))
 
                 model.train()
+                '''
 
 
 if __name__ == '__main__':

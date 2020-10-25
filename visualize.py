@@ -13,7 +13,7 @@ from datetime import datetime
 @click.command()
 @click.option('--steps', type=int, default=0)
 @click.option('--num_workers', type=int, default=4)
-@click.option('--last_checkpoint', type=str, default=os.path.join('trained_models', 'naive_lstm', '10-19-17:24:11'))
+@click.option('--last_checkpoint', type=str, default=os.path.join('trained_models', 'naive_lstm', '10-25-20:28:45'))
 @click.option('--batch_size', type=int, default=4)
 @click.option('--context_frame_num', type=int, default=8)
 @click.option('--trajectory_interval', type=int, default=20) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
@@ -22,7 +22,7 @@ def main(steps, num_workers, last_checkpoint, batch_size, context_frame_num, tra
 
     # torch.backends.cudnn.benchmark = True
     best_val_loss = np.Inf
-    device = torch.device('cuda:0')
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     test_dataset = ETHDataset("test", trajectory_interval, context_frame_num, agent_buffer_size)
     test_data_loader = data.DataLoader(test_dataset, batch_size=batch_size, drop_last=False,
                                       num_workers=num_workers, pin_memory=True, shuffle=False)
