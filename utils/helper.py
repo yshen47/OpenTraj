@@ -179,13 +179,13 @@ def draw_traj(model_dir, index, preds, inputs, background_img_dir=os.path.join('
     # plot ground-truth points
     red = [0, 255, 255]
     green = [255, 0, 0]
-    # for batch in inputs:
-    #     for agent_traj in batch:
-    #         for point in agent_traj:
-    #             if point[0] != 0 and point[1] != 0:
-    #                 x = int(point[0] * 10) + 75
-    #                 y = int(point[1] * 10) + 32
-    #                 canvass[x,y] = green
+    for batch in inputs:
+        for agent_traj in batch:
+            for point in agent_traj:
+                if point[0] != 0 and point[1] != 0:
+                    x = int(point[0] * 10) + 75
+                    y = int(point[1] * 10) + 32
+                    canvass[x,y] = green
     for batch in preds:
         for agent_traj in batch:
             for point in agent_traj:
