@@ -11,18 +11,19 @@ import os
 from datetime import datetime
 
 @click.command()
-@click.option('--experiment_name', type=str, default="naive_lstm")
+@click.option('--experiment_name', type=str, default="naive_lstm4")
 @click.option('--steps', type=int, default=0)
 @click.option('--num_workers', type=int, default=4)
 @click.option('--last_checkpoint', type=str, default=None)
-@click.option('--batch_size', type=int, default=4)
-@click.option('--epoch_num', type=int, default=1)
+@click.option('--batch_size', type=int, default=16)
+@click.option('--epoch_num', type=int, default=5)
 @click.option('--lr', type=float, default=1e-3)
-@click.option('--context_frame_num', type=int, default=8)
-@click.option('--trajectory_interval', type=int, default=20) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
-@click.option('--agent_buffer_size', type=int, default=8)
+@click.option('--context_frame_num', type=int, default=4)
+@click.option('--trajectory_interval', type=int, default=14) # each frame is 0.4 sec. It seems it takes 10 sec on average to walk on the trajectory
+@click.option('--agent_buffer_size', type=int, default=4)
 @click.option('--log_step', type=int, default=128)
-def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch_num, lr, context_frame_num, trajectory_interval, agent_buffer_size, log_step):
+@click.option('--single_traj_threshold', type=int, default=14)
+def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch_num, lr, context_frame_num, trajectory_interval, agent_buffer_size, log_step, single_traj_threshold):
     model_id = datetime.now().strftime("%m-%d-%H:%M:%S")
     model_dir = os.path.join("trained_models", experiment_name, model_id)
     if not os.path.exists(model_dir):
@@ -31,13 +32,13 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
 
     # torch.backends.cudnn.benchmark = True
     best_val_loss = np.Inf
-    device = torch.device('cuda:0')
+    device = torch.device('cpu')
 
-    train_dataset = ETHDataset("train", trajectory_interval, context_frame_num, agent_buffer_size)
+    train_dataset = ETHDataset("train", trajectory_interval, context_frame_num, agent_buffer_size, single_traj_threshold)
     train_data_loader = data.DataLoader(train_dataset, drop_last=True, shuffle=True,
                                         num_workers=num_workers, pin_memory=True, batch_size=batch_size)
 
-    val_dataset = ETHDataset("val", trajectory_interval, context_frame_num, agent_buffer_size)
+    val_dataset = ETHDataset("val", trajectory_interval, context_frame_num, agent_buffer_size, single_traj_threshold)
     val_data_loader = data.DataLoader(val_dataset, batch_size=batch_size, drop_last=False,
                                       num_workers=num_workers, pin_memory=True, shuffle=False)
 
@@ -53,11 +54,15 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     for e in range(epoch_num):
 
         print("Epoch: ", str(e))
-        for i, inputs in tqdm(
+        for i, (inputs, valid_mask) in tqdm(
                 enumerate(train_data_loader), total=len(train_data_loader)):
             inputs = inputs.to(device)
+            valid_mask = valid_mask.to(device).unsqueeze(-1).unsqueeze(-1)
             preds = model(inputs, context_frame_num)
-            loss = criterion(preds, inputs[:, :, context_frame_num:])
+            valid_mask = valid_mask.repeat(1, 1, *preds.shape[2:])
+            preds *= valid_mask
+            gt = inputs[:, :, context_frame_num:] * valid_mask
+            loss = criterion(preds, gt)
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -67,11 +72,15 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
             if steps % log_step == 1:
                 model.eval()
                 val_loss = 0.0
-                for i, inputs in tqdm(
+                for i, (inputs, valid_mask) in tqdm(
                         enumerate(val_data_loader), total=len(val_data_loader)):
                     inputs = inputs.to(device)
+                    valid_mask = valid_mask.to(device).unsqueeze(-1).unsqueeze(-1)
                     preds = model(inputs, context_frame_num)
-                    loss = criterion(preds, inputs[:, :, context_frame_num:])
+                    valid_mask = valid_mask.repeat(1, 1, *preds.shape[2:])
+                    preds *= valid_mask
+                    gt = inputs[:, :, context_frame_num:] * valid_mask
+                    loss = criterion(preds, gt)
                     val_loss += loss.item()
                 val_loss /= len(val_data_loader)
                 tb_logger.log_value("val_ADE", val_loss, step=steps)

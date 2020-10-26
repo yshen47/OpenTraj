@@ -7,6 +7,7 @@ from sklearn.metrics import confusion_matrix
 import os
 import matplotlib.pyplot as plt
 import seaborn as sns
+import cv2
 
 
 def save_checkpoint(state, prefix=''):
@@ -171,3 +172,29 @@ def compute_confusion_matrix(gts, preds):
     union = np.sum(conf, 0) + np.sum(conf, 1) - np.diag(conf)
     union = np.maximum(union, 1) * 1.0
     return inter / union, conf
+
+def draw_traj(model_dir, index, preds, inputs, background_img_dir=os.path.join('datasets', "ETH", "seq_eth", 'map.png')):
+    canvass = np.zeros([250,250,3])
+    canvass[:,:,:] = [255,255,255]
+    # plot ground-truth points
+    red = [0, 255, 255]
+    green = [255, 0, 0]
+    # for batch in inputs:
+    #     for agent_traj in batch:
+    #         for point in agent_traj:
+    #             if point[0] != 0 and point[1] != 0:
+    #                 x = int(point[0] * 10) + 75
+    #                 y = int(point[1] * 10) + 32
+    #                 canvass[x,y] = green
+    for batch in preds:
+        for agent_traj in batch:
+            for point in agent_traj:
+                x = int(point[0] * 10) + 75
+                y = int(point[1] * 10) + 32
+                canvass[x,y] = red
+
+    if not os.path.exists(os.path.join(model_dir, 'visualization')):
+        os.makedirs(os.path.join(model_dir, 'visualization'))
+    if preds.sum() > 0:
+        print(preds)
+        cv2.imwrite(os.path.join(model_dir, 'visualization', str(index) + ".jpg"), canvass)

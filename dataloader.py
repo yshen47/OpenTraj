@@ -8,16 +8,18 @@ import pandas as pd
 
 class ETHDataset(torch.utils.data.Dataset):
 
-    def __init__(self, mode, trajectory_interval, context_length, agent_buffer_size):
+    def __init__(self, mode, trajectory_interval, context_length, agent_buffer_size, single_traj_threshold):
         """
         mode:                       str         ['train', 'val', 'test']
         trajectory_interval:        int         time window for a batch data, each frame is 0.4 sec
         context_length:             int         known past trajectories
         agent_buffer_size:          int         max number of agents allowed in one data item
+        single_traj_threshold       int         the minimum number of points in a traj
         """
         self.mode = mode
         assert trajectory_interval > context_length
         self.trajectory_interval = trajectory_interval
+        self.single_traj_threshold = single_traj_threshold
         self.agent_buffer_size = agent_buffer_size
         self.context_length = context_length
         annot_file = os.path.join('datasets', 'ETH/seq_eth/obsmat.txt')
@@ -72,7 +74,14 @@ class ETHDataset(torch.utils.data.Dataset):
         indices = np.where((self.traj_dataset.data.timestamp >= start_timestamp) & (self.traj_dataset.data.timestamp < end_timestamp))[0]
         subset = self.traj_dataset.data.iloc[indices]
         agents = list(set(subset['agent_id'].iloc[:self.context_length])) # to ensure that agents appear in context frames, otherwise it's unreasonable to predict its future occurence.
-        random.shuffle(agents)
+        agent_count_map = {}
+        for i in range(subset.shape[0]):
+            curr = subset['agent_id'].iloc[i]
+            if curr in agents:
+                if curr not in agent_count_map:
+                    agent_count_map[curr] = 0
+                agent_count_map[curr] += 1
+        agents = sorted(agents, key=lambda x: agent_count_map[x], reverse=True)
         agents = agents[:self.agent_buffer_size]
 
         # group trajectory by agents
@@ -100,8 +109,7 @@ class ETHDataset(torch.utils.data.Dataset):
             agent_trajs[i, :, 0] = pos_x
             agent_trajs[i, :, 1] = pos_y
         agent_trajs = np.nan_to_num(agent_trajs)
-        if np.isnan(agent_trajs).any():
-            print('here')
-            pass
+
+        valid_mask = ((agent_trajs > 0)[:,:,0] + (agent_trajs > 0)[:,:,1]).sum(1) >= self.single_traj_threshold
         agent_trajs = torch.tensor(agent_trajs, dtype=torch.float)
-        return agent_trajs
+        return agent_trajs, valid_mask

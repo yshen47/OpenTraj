@@ -27,6 +27,8 @@ class Model(nn.Module):
         x = x.view(batch_size, agent_size, trajectory_length, *x.shape[1:])
         hiddens = []
         res = torch.zeros(*inputs.shape[:2], trajectory_length - self.context_frame_num, 2).to(self.device)
+
+        teacher_forcing = self.epsilon > random.random()
         for time_i in range(trajectory_length):
             for agent_i in range(agent_size):
                 if len(hiddens) < agent_size:
@@ -37,10 +39,11 @@ class Model(nn.Module):
                         hidden = self.GRUCell(x[:, agent_i, time_i], hiddens[agent_i])
                         hiddens[agent_i] = hidden
                     else:
-                        if self.epsilon > random.random():
+                        if not self.training or teacher_forcing:
                             hidden = self.GRUCell(hiddens[agent_i], hiddens[agent_i])
                         else:
                             hidden = self.GRUCell(x[:, agent_i, time_i], hiddens[agent_i])
+                        hiddens[agent_i] = hidden
                         curr = self.fc(hidden)
                         res[:, agent_i, time_i - context_frame_num] = curr
 
