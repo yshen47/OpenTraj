@@ -70,7 +70,7 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     traj_dataset.data.drop('frame_id', inplace=True, axis=1)
     traj_dataset.data.drop('timestamp', inplace=True, axis=1)
 
-    traj_dataset.data = traj_dataset.data[traj_dataset.data['agent_id'] == agent_id]
+    traj_dataset.data = traj_dataset.data[traj_dataset.data['agent_id'] == agent_id ]
     traj_dataset.data.drop('agent_id', inplace=True, axis=1)
 
     data_predict_x = traj_dataset.data.copy()
@@ -83,10 +83,10 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     data_predict_y.drop(labels=['pos_y'], axis=1, inplace=True)
     data_predict_y.insert(0, 'pos_y', pos_y)
 
-
     # split into train and test
-    train_x,test_x = split_dataset(data_predict_x)
+    train_x, test_x = split_dataset(data_predict_x)
     train_y, test_y = split_dataset(data_predict_y)
+    split_dataset(data_predict_y)
 
     # supervised = series_to_supervised(traj_dataset.data, 1, 2)
     # print(supervised.head())
@@ -96,11 +96,16 @@ def main(experiment_name, steps, num_workers, last_checkpoint, batch_size, epoch
     predictions_x,  score_x, scores_x = evaluate_model(train_x, test_x, n_input)
     predictions_y, score_y, scores_y = evaluate_model(train_y, test_y, n_input)
 
-
+    pyplot.figure()
     pyplot.scatter(data_predict_y['pos_y'], data_predict_x['pos_x'], c='y')
     pyplot.scatter(predictions_y[:,0,0], predictions_x[:,0,0], c='g')
     pyplot.scatter(test_y[:,0,0], test_x[:,0,0], c='b')
 
+    pyplot.figure()
+    pyplot.plot(scores_x)
+
+    pyplot.figure()
+    pyplot.plot(scores_y)
     pyplot.show()
 
 
@@ -156,9 +161,9 @@ def split_dataset(data):
 def evaluate_forecasts(actual, predicted):
 	scores = list()
 	# calculate an RMSE score for each day
-	for i in range(actual.shape[1]):
+	for i in range(actual.shape[0]):
 		# calculate mse
-		mse = mean_squared_error(actual[:, i], predicted[:, i])
+		mse = mean_squared_error(actual[i, :], predicted[i, :])
 		# calculate rmse
 		rmse = sqrt(mse)
 		# store
@@ -177,7 +182,7 @@ def build_model(train, n_in):
     # prepare data
 	train_x, train_y = to_supervised(train, n_in)
     # define parameters
-	verbose, epochs, batch_size = 0, 70, 8
+	verbose, epochs, batch_size = 0, 100, 16
 	n_timesteps, n_features, n_outputs = train_x.shape[1], train_x.shape[2], train_y.shape[1]
     # reshape output into [samples, timesteps, features]
 	train_y = train_y.reshape((train_y.shape[0], train_y.shape[1], 1))
